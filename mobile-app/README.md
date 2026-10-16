@@ -8,6 +8,13 @@ on a phone. Two views:
   CMAC a chip would mirror is computed on-device by the SDK, so you get an
   animated **Authentic / Replayed / Counterfeit** verdict — no chip, no tooling.
 - **Verify** — enter a tapped tag's `u`/`c`/`m` and get the verdict.
+- **ArtTrust passport** — the verdict as four checks (chip, fresh read, artist
+  signature, curator's guarantee). When the app is built with
+  `--dart-define=STUDIO_BASE=<Veritag Studio URL>`, a tap goes through Studio's
+  `/experience`: the passport also shows the work's story, the Private Views the
+  tap unlocked (opened on the web platform with the signed pass) and the artist's
+  card — *Save contact* (vCard) and *Book a studio visit*. `WEB_BASE` (default
+  `https://app.veritag.art`) is where those hand-offs land.
 
 A connection chip polls the AttestCore endpoint (editable; pre-filled with the
 dev machine's LAN IP so the phone reaches it on the same Wi-Fi).

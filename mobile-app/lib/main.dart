@@ -31,6 +31,28 @@ const _hair = Color(0x12FFFFFF);
 // the endpoint stays ours. For local dev, change it in Settings to your
 // machine's LAN IP, e.g. http://192.168.1.181:8090.
 const _defaultBase = 'https://api.veritag.art';
+
+// Veritag Studio — what a verified tap unlocks (artist card + vCard, Private
+// Views). Baked at build time: `--dart-define=STUDIO_BASE=https://…`; empty
+// keeps the app on the core passport alone. WEB_BASE is the web platform the
+// app hands off to for Private Views and studio-visit requests.
+const _studioBase = String.fromEnvironment('STUDIO_BASE');
+const _webBase = String.fromEnvironment('WEB_BASE', defaultValue: 'https://app.veritag.art');
+
+/// Native hand-offs (MainActivity): open a link in the browser / contacts.
+const _platform = MethodChannel('veritag/nfc');
+
+Future<void> _openUrl(BuildContext context, String url) async {
+  var ok = false;
+  try {
+    ok = await _platform.invokeMethod<bool>('openUrl', url) ?? false;
+  } catch (_) {}
+  if (ok || !context.mounted) return;
+  await Clipboard.setData(ClipboardData(text: url));
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Link copied — open it in your browser')));
+  }
+}
 const _kArtistId = 'artist_id';
 const _kArtistName = 'artist_name';
 const _kBase = 'api_base';
@@ -139,10 +161,10 @@ class _HomePageState extends State<HomePage> {
     setState(() { _error = null; _notice = null; _busy = 'scan'; });
     () async {
       try {
-        final p = d.sdmActive
-            ? await _api().passport(d.uid ?? '', d.ctr, d.cmacHex)
-            : await _api().passport(d.uid ?? '', 0, '');
-        if (mounted) _openPassport(p);
+        final r = d.sdmActive
+            ? await _lookup(d.uid ?? '', d.ctr, d.cmacHex)
+            : await _lookup(d.uid ?? '', 0, '');
+        if (mounted) _openPassport(r);
       } catch (e) {
         if (mounted) setState(() => _error = _msg(e));
       } finally {
@@ -151,8 +173,24 @@ class _HomePageState extends State<HomePage> {
     }();
   }
 
-  void _openPassport(Passport p) {
-    Navigator.of(context).push(MaterialPageRoute(builder: (_) => PassportPage(passport: p)));
+  void _openPassport(TapResult r) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => PassportPage(passport: r.passport, studio: r.studio)));
+  }
+
+  /// Resolve a tap. With Studio on, one call verifies it (through the core)
+  /// and brings what it unlocks; if Studio is unreachable the core still
+  /// verifies. A real answer from Studio (404, 422…) is final either way.
+  Future<TapResult> _lookup(String u, int c, String m) async {
+    if (_studioBase.isNotEmpty) {
+      try {
+        return await StudioClient(_studioBase).experience(u, c, m);
+      } on VeritagApiError {
+        rethrow;
+      } catch (_) {
+        // network trouble on the Studio side — fall through to the core
+      }
+    }
+    return TapResult(await _api().passport(u, c, m));
   }
 
   @override
@@ -249,14 +287,14 @@ class _HomePageState extends State<HomePage> {
       final d = read.data;
       // A live SDM mirror gives the full cryptographic verdict; anything else
       // (blank tag, legacy URL, half-provisioned) falls back to the record view.
-      final p = d != null && d.sdmActive
-          ? await _api().passport(d.uid ?? read.uid, d.ctr, d.cmacHex)
+      final r = d != null && d.sdmActive
+          ? await _lookup(d.uid ?? read.uid, d.ctr, d.cmacHex)
           : d?.legacyUrl != null
-              ? await _api().passportUrl(d!.legacyUrl!)
-              : await _api().passport(read.uid, 0, '');
+              ? TapResult(await _api().passportUrl(d!.legacyUrl!))
+              : await _lookup(read.uid, 0, '');
       if (!mounted) return;
       HapticFeedback.mediumImpact();
-      _openPassport(p);
+      _openPassport(r);
     } catch (e) {
       if (!mounted) return;
       if (_nfcCancelled) return; // user backed out — nothing to report
@@ -891,8 +929,9 @@ class _VerificationPanelState extends State<VerificationPanel> {
 /// rendered with gaplessPlayback, so no rebuild (parent pings, animations…)
 /// ever re-decodes or flashes it.
 class PassportPage extends StatefulWidget {
-  const PassportPage({super.key, required this.passport});
+  const PassportPage({super.key, required this.passport, this.studio});
   final Passport passport;
+  final StudioExtras? studio; // what Veritag Studio adds — null when off
   @override
   State<PassportPage> createState() => _PassportPageState();
 }
@@ -1019,6 +1058,10 @@ class _PassportPageState extends State<PassportPage> {
                 const SizedBox(height: 14),
                 Text(p.artworkDescription, style: const TextStyle(color: _muted, fontSize: 14, height: 1.6)),
               ],
+              if ((widget.studio?.story ?? '').isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text(widget.studio!.story, style: _serif(17, FontWeight.w400, _ink).copyWith(height: 1.45)),
+              ],
               if (p.artworkVideoUrl.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Row(children: [
@@ -1028,8 +1071,16 @@ class _PassportPageState extends State<PassportPage> {
                 ]),
               ],
 
-              // ── the verdict, in words ────────────────────────────────
+              // ── the verdict, in words: the ArtTrust certificate ──────
               const SizedBox(height: 26),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: Row(children: [
+                  Icon(Icons.verified_user_rounded, size: 16, color: _gold),
+                  SizedBox(width: 8),
+                  Text('ARTTRUST CERTIFICATE', style: TextStyle(color: _muted, fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w700)),
+                ]),
+              ),
               _Glow(color: c, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
                   Container(width: 46, height: 46, decoration: BoxDecoration(color: c.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(14)), child: Icon(icon, color: c, size: 25)),
@@ -1059,8 +1110,13 @@ class _PassportPageState extends State<PassportPage> {
                   _check(p.chipAuthentic, 'Chip is genuine', 'its one-time cryptographic proof matches'),
                   _check(p.notReplayed, 'Fresh scan', 'this exact tap was never seen before'),
                   _check(p.issuerVerified, 'Artist signature', 'the work is signed by its artist'),
+                  _check(p.artistVerified, "Curator's guarantee",
+                      p.artistVerified ? 'blue check from ${p.verifiedBy.join(", ")}' : 'no curator has vouched for the artist yet'),
                 ],
               ])),
+
+              // ── what the tap unlocked (Veritag Studio) ───────────────
+              if (widget.studio != null) ..._unlocked(context, p, widget.studio!),
 
               // ── provenance ───────────────────────────────────────────
               const SizedBox(height: 28),
@@ -1109,12 +1165,79 @@ class _PassportPageState extends State<PassportPage> {
               if (p.uid.isNotEmpty) _fact('Chip UID', p.uid, mono: true),
               if (!isRecord) _fact('Tap number', '#${p.ctr} — the chip counts every read'),
               if (p.bindingId.isNotEmpty) _fact('Binding', p.bindingId, mono: true),
-              _fact('Tag content', 'a data record, not a link — only ArtTrust can read it into a passport'),
+              _fact('Tag content', 'a data record, not a link — only Veritag reads it into an ArtTrust passport'),
             ]),
           )),
         ]),
       ),
     );
+  }
+
+  /// Private Views this tap opened, and the artist's card with its two
+  /// hand-offs: save the vCard, book a studio visit.
+  List<Widget> _unlocked(BuildContext context, Passport p, StudioExtras s) {
+    final card = s.card;
+    final artistId = card?.artistId.isNotEmpty == true ? card!.artistId : null;
+    final name = (card?.displayName.isNotEmpty ?? false) ? card!.displayName : (p.artistName ?? 'the artist');
+    return [
+      for (final v in s.views) ...[
+        const SizedBox(height: 14),
+        GestureDetector(
+          onTap: v.locked || s.pass == null
+              ? null
+              : () => _openUrl(context, '$_webBase/v/${v.id}?k=${Uri.encodeComponent(s.pass!)}'),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: LinearGradient(colors: [_gold.withValues(alpha: v.locked ? 0.05 : 0.16), _violet.withValues(alpha: v.locked ? 0.03 : 0.12)]),
+              border: Border.all(color: _gold.withValues(alpha: v.locked ? 0.2 : 0.45)),
+            ),
+            child: Row(children: [
+              Icon(v.locked ? Icons.lock_rounded : Icons.auto_awesome_rounded, color: _gold, size: 22),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(v.locked ? 'PRIVATE VIEW' : 'PRIVATE VIEW UNLOCKED',
+                    style: const TextStyle(color: _gold, fontSize: 10.5, letterSpacing: 1, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 3),
+                Text(v.title, style: _serif(17, FontWeight.w600)),
+                Text(
+                  v.locked
+                      ? '${v.itemCount} reserved works — opens when you tap the artwork in person'
+                      : (v.intro.isNotEmpty ? v.intro : '${v.itemCount} reserved works, just for you'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _muted, fontSize: 12.5, height: 1.35),
+                ),
+              ])),
+              if (!v.locked) const Icon(Icons.arrow_forward_rounded, color: _gold),
+            ]),
+          ),
+        ),
+      ],
+      if (artistId != null) ...[
+        const SizedBox(height: 28),
+        const Row(children: [
+          Icon(Icons.contact_page_rounded, size: 16, color: _gold),
+          SizedBox(width: 8),
+          Text('THE ARTIST', style: TextStyle(color: _muted, fontSize: 11, letterSpacing: 1, fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: 10),
+        Text(name, style: _serif(19, FontWeight.w600)),
+        if (card!.headline.isNotEmpty || card.city.isNotEmpty)
+          Text([card.headline, card.city].where((x) => x.isNotEmpty).join(' · '), style: const TextStyle(color: _muted, fontSize: 13)),
+        const SizedBox(height: 14),
+        _PrimaryButton(
+          label: 'Save contact',
+          onTap: () => _openUrl(context, StudioClient(_studioBase).vcardUrl(artistId)),
+        ),
+        const SizedBox(height: 10),
+        _QuietButton(
+          label: 'Book a studio visit',
+          onTap: () => _openUrl(context, '$_webBase/a/$artistId'),
+        ),
+      ],
+    ];
   }
 
   Widget _check(bool ok, String label, String hint) => Padding(
