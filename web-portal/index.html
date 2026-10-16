@@ -1,16 +1,35 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <link rel="icon" type="image/svg+xml" href="/mark.svg" />
     <link rel="apple-touch-icon" href="/icon-512.png" />
-    <meta name="theme-color" content="#08070D" />
-    <title>Veritag — Authenticity for art</title>
-    <meta name="description" content="Veritag curator portal — verify the authenticity of NFC-tagged artworks." />
+    <meta name="theme-color" content="#09080f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Veritag — ArtTrust</title>
+    <meta name="description" content="Veritag: il passaporto digitale dell'opera d'arte. Autenticità ArtTrust su chip NFC, Private View esclusive, contatto diretto con l'artista." />
+    <meta property="og:title" content="Veritag — l'opera si racconta al tocco" />
+    <meta property="og:description" content="Passaporti certificati ArtTrust, Private View riservate e il contatto dell'artista: tutto dentro il tag NFC." />
+    <meta property="og:image" content="/icon-512.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=Instrument+Serif:ital@0;1&display=swap"
+    />
+    <script>
+      // Paint the right theme before React boots — no flash.
+      try {
+        var t = localStorage.getItem("veritag.theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>Veritag richiede JavaScript.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

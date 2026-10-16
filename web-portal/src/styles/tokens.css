@@ -1,0 +1,151 @@
+/* Veritag design tokens.
+   Dark is the gallery at night; light is the museum page. The mark's
+   violet→gold gradient is the brand; ArtTrust blue is reserved for trust. */
+:root {
+  --bg: #09080f;
+  --bg-2: #0e0d17;
+  --surface: rgba(255, 255, 255, 0.035);
+  --surface-2: rgba(255, 255, 255, 0.06);
+  --surface-3: rgba(255, 255, 255, 0.09);
+  --elevated: #14131d;
+  --overlay: rgba(6, 5, 10, 0.72);
+  --border: rgba(255, 255, 255, 0.075);
+  --border-2: rgba(255, 255, 255, 0.14);
+  --text: #f2f0f8;
+  --muted: #a3a1b8;
+  --faint: #6f6c86;
+  --invert: #09080f;
+
+  --violet: #9a82ff;
+  --violet-2: #7c5cff;
+  --gold: #d8b46a;
+  --gold-2: #b98f3e;
+  --trust: #4a8dff;
+  --trust-2: #2f6bff;
+  --green: #36d399;
+  --amber: #f4b740;
+  --red: #ff5c72;
+
+  --green-soft: rgba(54, 211, 153, 0.12);
+  --amber-soft: rgba(244, 183, 64, 0.12);
+  --red-soft: rgba(255, 92, 114, 0.12);
+  --trust-soft: rgba(74, 141, 255, 0.13);
+  --violet-soft: rgba(154, 130, 255, 0.13);
+  --gold-soft: rgba(216, 180, 106, 0.13);
+
+  --brand-grad: linear-gradient(135deg, #a78bff 0%, #7c5cff 48%, #d8b46a 100%);
+  --btn-grad: linear-gradient(135deg, #a991ff, #7c5cff);
+  --glow: radial-gradient(1100px 650px at 85% -12%, rgba(154, 130, 255, 0.15), transparent 60%),
+    radial-gradient(900px 560px at -12% 108%, rgba(216, 180, 106, 0.09), transparent 55%);
+
+  --r-xs: 8px;
+  --r-sm: 11px;
+  --r: 16px;
+  --r-lg: 22px;
+  --r-xl: 30px;
+
+  --shadow-sm: 0 6px 18px -10px rgba(0, 0, 0, 0.7);
+  --shadow: 0 22px 56px -26px rgba(0, 0, 0, 0.8);
+  --shadow-lg: 0 40px 90px -40px rgba(0, 0, 0, 0.9);
+  --ring: 0 0 0 3px rgba(154, 130, 255, 0.28);
+
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --serif: "Instrument Serif", "Iowan Old Style", Palatino, Georgia, serif;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --t-fast: 0.14s var(--ease);
+  --t: 0.24s var(--ease);
+
+  --map-filter: brightness(0.82) invert(1) contrast(0.86) hue-rotate(200deg) saturate(0.35);
+
+  --header-h: 64px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --bg: #f7f5f0;
+  --bg-2: #f1eee7;
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-2: rgba(23, 21, 31, 0.045);
+  --surface-3: rgba(23, 21, 31, 0.08);
+  --elevated: #ffffff;
+  --overlay: rgba(23, 21, 31, 0.42);
+  --border: rgba(23, 21, 31, 0.09);
+  --border-2: rgba(23, 21, 31, 0.16);
+  --text: #17151f;
+  --muted: #5c596d;
+  --faint: #8d8a9e;
+  --invert: #ffffff;
+
+  --violet: #6a4cf0;
+  --violet-2: #5638e0;
+  --gold: #a8812f;
+  --gold-2: #8a6a22;
+  --trust: #2f6bff;
+  --trust-2: #1f55e0;
+  --green: #12996a;
+  --amber: #c47f00;
+  --red: #d63a52;
+
+  --green-soft: rgba(18, 153, 106, 0.1);
+  --amber-soft: rgba(196, 127, 0, 0.1);
+  --red-soft: rgba(214, 58, 82, 0.09);
+  --trust-soft: rgba(47, 107, 255, 0.09);
+  --violet-soft: rgba(106, 76, 240, 0.09);
+  --gold-soft: rgba(168, 129, 47, 0.11);
+
+  --btn-grad: linear-gradient(135deg, #7a5cff, #5638e0);
+  --glow: radial-gradient(1100px 650px at 85% -12%, rgba(124, 92, 255, 0.08), transparent 60%),
+    radial-gradient(900px 560px at -12% 108%, rgba(216, 180, 106, 0.12), transparent 55%);
+
+  --shadow-sm: 0 6px 18px -12px rgba(23, 21, 31, 0.28);
+  --shadow: 0 22px 50px -28px rgba(23, 21, 31, 0.32);
+  --shadow-lg: 0 40px 80px -40px rgba(23, 21, 31, 0.4);
+  --ring: 0 0 0 3px rgba(106, 76, 240, 0.22);
+  --map-filter: none;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f7f5f0;
+    --bg-2: #f1eee7;
+    --surface: rgba(255, 255, 255, 0.72);
+    --surface-2: rgba(23, 21, 31, 0.045);
+    --surface-3: rgba(23, 21, 31, 0.08);
+    --elevated: #ffffff;
+    --overlay: rgba(23, 21, 31, 0.42);
+    --border: rgba(23, 21, 31, 0.09);
+    --border-2: rgba(23, 21, 31, 0.16);
+    --text: #17151f;
+    --muted: #5c596d;
+    --faint: #8d8a9e;
+    --invert: #ffffff;
+    --violet: #6a4cf0;
+    --violet-2: #5638e0;
+    --gold: #a8812f;
+    --gold-2: #8a6a22;
+    --trust: #2f6bff;
+    --trust-2: #1f55e0;
+    --green: #12996a;
+    --amber: #c47f00;
+    --red: #d63a52;
+    --green-soft: rgba(18, 153, 106, 0.1);
+    --amber-soft: rgba(196, 127, 0, 0.1);
+    --red-soft: rgba(214, 58, 82, 0.09);
+    --trust-soft: rgba(47, 107, 255, 0.09);
+    --violet-soft: rgba(106, 76, 240, 0.09);
+    --gold-soft: rgba(168, 129, 47, 0.11);
+    --btn-grad: linear-gradient(135deg, #7a5cff, #5638e0);
+    --glow: radial-gradient(1100px 650px at 85% -12%, rgba(124, 92, 255, 0.08), transparent 60%),
+      radial-gradient(900px 560px at -12% 108%, rgba(216, 180, 106, 0.12), transparent 55%);
+    --shadow-sm: 0 6px 18px -12px rgba(23, 21, 31, 0.28);
+    --shadow: 0 22px 50px -28px rgba(23, 21, 31, 0.32);
+    --shadow-lg: 0 40px 80px -40px rgba(23, 21, 31, 0.4);
+    --ring: 0 0 0 3px rgba(106, 76, 240, 0.22);
+    --map-filter: none;
+    color-scheme: light;
+  }
+}

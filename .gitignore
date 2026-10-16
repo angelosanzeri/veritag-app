@@ -21,3 +21,7 @@ local.properties
 
 # Python bytecode (brand/make_mark.py)
 __pycache__/
+
+# dev stack state + Python caches
+dev/.studio-dev.json
+.pytest_cache/
