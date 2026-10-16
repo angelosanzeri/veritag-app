@@ -1,50 +1,45 @@
-# ArtTrust curator portal — web app (React + `@dna424/client`)
+# Veritag web platform
 
-The **curator's** web platform — authenticity *oversight*, not an app clone. The
-curator does **not** mint tags (that's the artist, on the mobile app, with the
-chip). Two views:
+One React app, three faces, code-split so a visitor's tap loads only what it needs.
 
-- **Verify** — check an artwork's tag (paste the URL it opens, or `u`/`c`/`m`),
-  get the verdict, and see the tag **re-attributed to a known artist** from the
-  roster. A session audit trail of recent checks builds up.
-- **Artists** — the roster: **onboard** an artist by registering their *public*
-  key as an issuer (the private key stays on the artist's device; the curator
-  keeps only the token), **label** a known issuer id with a name for attribution,
-  and **revoke** a compromised artist.
+| Face | Routes | |
+|---|---|---|
+| **Visitor** | `/p?u&c&m&kv` · `/t/:uid` · `/a/:artist` · `/v/:view` | ArtTrust passport (live SDM tap, or the archive record), artist page with vCard + studio-visit request, Private View with per-work enquiries |
+| **Curator** | `/studio/…` | overview & insights · blue-check verifications · artists (profile & vCard, invites) · works (story, QR wall label, provenance) · exhibitions on the map · Private Views · leads (CSV export) · settings |
+| **Artist** | `/studio/…` | overview · profile & vCard · own works' stories · own Private Views · leads |
 
-Roles, mirroring the old monolith:
-- **Web (this app)** = curator: verify, manage the roster, revoke.
-- **Mobile app** = artist (forge/mint tags over NFC) + visitor (check a tag).
-
-## Run
-
-Ships in the stack:
-```bash
-docker compose up --build      # from the repo root: API :8080 + this portal :5173
-open http://localhost:5173
-```
-
-Dev with hot-reload:
-```bash
-cd ../../../sdk/ts/dna424-client && npm install && npm run build   # build the SDK once
-cd -
-npm install && npm run dev      # http://localhost:5173
-npm test                        # binding conformance (tsc + node:test)
-```
-
-## Try it end to end
-
-1. An artist makes a tag (simulated): `attestcore/.venv/bin/python
-   consumers/arttrust/make_test_tag.py` — prints a verify URL + the `issuer_id`.
-2. **Verify** tab → paste the URL → **Authentic** (artist still "unknown").
-3. **Artists** tab → *Label a known issuer* → add that `issuer_id` as a name.
-4. **Verify** again → now attributed **by that artist**.
-
-The full curator flow (onboard → verify → revoke → unverified) is validated
-against a live backend.
+Entry points: `/` (check a tag link or code), `/login` (curator or artist), `/join?code=` (artist invite).
 
 ## How it's built
 
-- `src/App.tsx` — the React UI (Verify + Artists, roster in `localStorage`).
-- `src/portal.ts` — `CuratorClient` on the SDK: `registerArtist`, `revokeArtist`,
-  `verify` / `verifyUrl`. No private key is created or held here.
+- `src/portal.ts` — veritag-core client + the ArtTrust verdict policy and the
+  binding helpers (byte-identical to the backend and the Flutter app; pinned by
+  `test/portal.test.mjs`), plus `parseTap` for every tag/link shape.
+- `src/studio-api.ts` — the Veritag Studio client.
+- `src/lib/` — a tiny History-API router with View Transitions, a
+  stale-while-revalidate query cache, the session (curator via core, artist via
+  Studio), side-by-side IT/EN strings (`t("Ciao", "Hello")`), theme, image downscaling.
+- `src/ui/` — the UI kit on the design tokens in `src/styles/tokens.css`.
+- `src/public/` — visitor pages; `src/studio/` — the Studio.
+- Leaflet maps and the QR generator load lazily, only on screens that show them.
+
+A verified tap is cached for the tab, so refreshing the passport shows the
+original verdict instead of flagging your own tap as a replay.
+
+## Configure
+
+| Build variable | |
+|---|---|
+| `VITE_API_BASE` | veritag-core (default in dev `http://localhost:8090`, in prod `https://api.veritag.art`) |
+| `VITE_STUDIO_BASE` | Studio API; empty switches Studio features off (dev default `http://localhost:8091`) |
+
+Both can be overridden at runtime under *Settings → Services* (or *Advanced
+endpoints* on the sign-in page).
+
+## Run
+
+```bash
+../dev/run.sh                    # the whole stack, with the mock core
+npm run dev                      # just the web app on :5173
+npm run typecheck && npm test && npm run build
+```

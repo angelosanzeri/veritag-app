@@ -268,3 +268,106 @@ class VeritagApi {
         kv: int.tryParse(q['kv'] ?? '1') ?? 1);
   }
 }
+
+// ── Veritag Studio: what a verified tap unlocks ─────────────────────────────
+
+/// The artist's public card, as Studio serves it with a tap.
+class ArtistCard {
+  ArtistCard({
+    required this.artistId,
+    required this.displayName,
+    required this.headline,
+    required this.city,
+    required this.website,
+    required this.instagram,
+  });
+  final String artistId;
+  final String displayName;
+  final String headline;
+  final String city;
+  final String website;
+  final String instagram;
+
+  factory ArtistCard.fromJson(Map<String, dynamic> j) => ArtistCard(
+        artistId: (j['artist_id'] ?? '') as String,
+        displayName: (j['display_name'] ?? '') as String,
+        headline: (j['headline'] ?? '') as String,
+        city: (j['city'] ?? '') as String,
+        website: (j['website'] ?? '') as String,
+        instagram: (j['instagram'] ?? '') as String,
+      );
+}
+
+/// A Private View this tap knows about: open (with the pass) or still locked.
+class ViewTeaser {
+  ViewTeaser(this.id, this.title, this.intro, this.itemCount, this.locked);
+  final String id;
+  final String title;
+  final String intro;
+  final int itemCount;
+  final bool locked;
+
+  factory ViewTeaser.fromJson(Map<String, dynamic> j) => ViewTeaser(
+        j['id'] as String,
+        (j['title'] ?? '') as String,
+        (j['intro'] ?? '') as String,
+        (j['item_count'] ?? 0) as int,
+        (j['locked'] ?? true) as bool,
+      );
+}
+
+/// Everything Studio adds on top of the passport.
+class StudioExtras {
+  StudioExtras({required this.card, required this.views, required this.pass, required this.story});
+  final ArtistCard? card;
+  final List<ViewTeaser> views;
+  final String? pass; // signed Private View pass — only for a fresh, authentic tap
+  final String story;
+
+  factory StudioExtras.fromJson(Map<String, dynamic> j) {
+    final card = j['card'] as Map<String, dynamic>?;
+    final unlock = j['unlock'] as Map<String, dynamic>?;
+    final extras = j['extras'] as Map<String, dynamic>?;
+    return StudioExtras(
+      card: card == null ? null : ArtistCard.fromJson(card),
+      views: ((j['views'] ?? []) as List).map((v) => ViewTeaser.fromJson(v as Map<String, dynamic>)).toList(),
+      pass: unlock?['token'] as String?,
+      story: (extras?['story'] ?? '') as String,
+    );
+  }
+}
+
+/// A tap, resolved: the ArtTrust passport, plus Studio's experience when on.
+class TapResult {
+  TapResult(this.passport, [this.studio]);
+  final Passport passport;
+  final StudioExtras? studio;
+
+  factory TapResult.fromExperience(Map<String, dynamic> j) =>
+      TapResult(Passport.fromJson(j['passport'] as Map<String, dynamic>), StudioExtras.fromJson(j));
+}
+
+/// Client for Veritag Studio's /experience: one call that verifies the tap
+/// with veritag-core and returns the passport with what it unlocks.
+class StudioClient {
+  StudioClient(this.baseUrl, {http.Client? client}) : _http = client ?? http.Client();
+  final String baseUrl;
+  final http.Client _http;
+
+  String get _base => normalizeBase(baseUrl);
+
+  String vcardUrl(String artistId) => '$_base/artists/${Uri.encodeComponent(artistId)}/vcard';
+
+  Future<TapResult> experience(String u, int c, String mHex, {int kv = 1}) async {
+    final uri = Uri.parse('$_base/experience').replace(queryParameters: {'u': u, 'c': '$c', 'm': mHex, 'kv': '$kv'});
+    final r = await _http.get(uri).timeout(const Duration(seconds: 15));
+    if (r.statusCode >= 400) {
+      String detail = r.reasonPhrase ?? 'error';
+      try {
+        detail = (jsonDecode(r.body) as Map<String, dynamic>)['detail'] as String? ?? detail;
+      } catch (_) {}
+      throw VeritagApiError(r.statusCode, detail);
+    }
+    return TapResult.fromExperience(jsonDecode(r.body) as Map<String, dynamic>);
+  }
+}

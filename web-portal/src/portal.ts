@@ -1,21 +1,20 @@
 /**
- * Curator portal logic.
+ * The Veritag domain client (veritag-core) + the ArtTrust verdict policy.
  *
  * Two layers:
- *  - the Veritag DOMAIN client (`VeritagApi`) — the curator's real work:
- *    confirm an artist's blue check, see the roster, assemble virtual rooms,
- *    read the same passport a visitor sees. Talks to the Veritag domain API.
+ *  - `VeritagApi` — curators, artists, the blue-check handshake, exhibitions and
+ *    the visitor passport, over the domain API (https://api.veritag.art).
  *  - the binding helpers (`veritagBinding`, `verdictOf`) — kept byte-identical
  *    to the Python backend + Flutter app and pinned by test/portal.test.mjs.
  *
- * No private key is ever created or held here — the curator oversees, the artist
- * signs on their device.
+ * No private key is ever created or held here — artists sign on their device.
  */
 import { type VerifyResult } from "@veritag/sdk";
 
 export type Verdict = "authentic" | "counterfeit" | "replayed" | "unverified_artist";
+export type PassportVerdict = Verdict | "record";
 
-/** The curator's policy over the core's three independent booleans. */
+/** The ArtTrust policy over the core's three independent booleans. */
 export function verdictOf(v: VerifyResult): Verdict {
   if (!v.chip_authentic) return "counterfeit";
   if (!v.not_replayed) return "replayed";
@@ -26,15 +25,11 @@ export function verdictOf(v: VerifyResult): Verdict {
 const SEP = 0x1f; // unit separator — must match veritag-core arttrust/binding.py
 
 /**
- * the Veritag domain binding: SHA-256(uid ‖ 0x1f ‖ title ‖ 0x1f ‖ artist_id).
+ * The Veritag domain binding: SHA-256(uid ‖ 0x1f ‖ title ‖ 0x1f ‖ artist_id).
  * Built by ARTISTS (not the curator); kept here byte-identical to the Python
  * backend and the Flutter app and pinned by test/portal.test.mjs.
  */
-export async function veritagBinding(
-  uid: string,
-  title: string,
-  artistId: string,
-): Promise<Uint8Array> {
+export async function veritagBinding(uid: string, title: string, artistId: string): Promise<Uint8Array> {
   const enc = new TextEncoder();
   const parts = [enc.encode(uid), enc.encode(title), enc.encode(artistId)];
   const out: number[] = [];
@@ -45,7 +40,7 @@ export async function veritagBinding(
   return new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(out) as BufferSource));
 }
 
-// ---- domain types (mirror api/schemas.py) ---------------------------------
+// ---- domain types (mirror veritag-core api/schemas.py) ----------------------
 
 export interface Curator {
   curator_id: string;
@@ -132,7 +127,7 @@ export interface ExhibitionRef {
 export interface Passport {
   uid: string;
   ctr: number;
-  verdict: Verdict;
+  verdict: PassportVerdict;
   chip_authentic: boolean;
   not_replayed: boolean;
   issuer_verified: boolean;
@@ -166,28 +161,78 @@ export interface CuratorAuth {
   token: string;
 }
 
+/** A tap, as the chip mirrors it: UID, read counter, CMAC (+ key version). */
+export interface Tap {
+  u: string;
+  c: number;
+  m: string;
+  kv: number;
+}
+
+export class ApiError extends Error {
+  constructor(readonly status: number, readonly detail: string) {
+    super(detail);
+  }
+}
+
+/** FastAPI errors: `{detail: "…"}` or a 422 `{detail: [{loc, msg}]}`. */
+export async function readError(r: Response): Promise<ApiError> {
+  let detail = r.statusText || "error";
+  try {
+    const body = await r.json();
+    if (typeof body.detail === "string") detail = body.detail;
+    else if (Array.isArray(body.detail) && body.detail[0]) {
+      const d = body.detail[0];
+      const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : "";
+      detail = field && field !== "body" ? `${field}: ${d.msg}` : d.msg;
+    }
+  } catch {
+    /* not json */
+  }
+  return new ApiError(r.status, detail);
+}
+
+/** Parse anything a tag or a share can hand us into a tap (or a bare UID). */
+export function parseTap(input: string): Tap | { uid: string } | null {
+  const raw = input.trim();
+  if (!raw) return null;
+  if (/^[0-9a-f]{8,32}$/i.test(raw)) return { uid: raw.toUpperCase() };
+  const payload = /^v1;/.test(raw) ? raw : null; // the NDEF payload itself
+  if (payload) {
+    const kv = Object.fromEntries(payload.split(";").slice(1).map((p) => p.split("=") as [string, string]));
+    if (!kv.u) return null;
+    return { u: kv.u.toUpperCase(), c: parseInt(kv.c ?? "0", 16) || 0, m: (kv.m ?? "").toLowerCase(), kv: 1 };
+  }
+  try {
+    const url = new URL(raw.includes("://") ? raw : `https://${raw}`);
+    const q = url.searchParams;
+    const segs = url.pathname.split("/").filter(Boolean);
+    if (q.get("u")) {
+      return { u: q.get("u")!.toUpperCase(), c: Number(q.get("c") ?? "0") || 0, m: q.get("m") ?? "", kv: Number(q.get("kv") ?? "1") || 1 };
+    }
+    if (segs.length >= 2 && segs[segs.length - 2] === "t") return { uid: segs[segs.length - 1].toUpperCase() };
+  } catch {
+    /* not a URL */
+  }
+  return null;
+}
+
 /** Thin fetch client over the Veritag domain API. Carries the curator session
  *  token (when set) so the guarded endpoints authenticate transparently. */
 export class VeritagApi {
-  constructor(private readonly base: string, private token?: string) {}
-
-  setToken(token?: string) {
-    this.token = token;
-  }
+  constructor(readonly base: string, private token?: string) {}
 
   private async j<T>(path: string, init?: RequestInit): Promise<T> {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {};
+    if (init?.body) headers["Content-Type"] = "application/json";
     if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
-    const r = await fetch(`${this.base}${path}`, { ...init, headers: { ...headers, ...(init?.headers as object) } });
-    if (!r.ok) {
-      let detail = r.statusText;
-      try {
-        detail = (await r.json()).detail ?? detail;
-      } catch {
-        /* not json */
-      }
-      throw new Error(`${r.status} — ${detail}`);
+    let r: Response;
+    try {
+      r = await fetch(`${this.base}${path}`, { ...init, headers: { ...headers, ...(init?.headers as object) } });
+    } catch {
+      throw new ApiError(0, "network");
     }
+    if (!r.ok) throw await readError(r);
     return (r.status === 204 ? undefined : await r.json()) as T;
   }
 
@@ -196,7 +241,7 @@ export class VeritagApi {
     return this.j("/meta");
   }
 
-  // -- auth --
+  // -- curator session --
   register(username: string, name: string, password: string, bio = ""): Promise<CuratorAuth> {
     return this.j("/curators", { method: "POST", body: JSON.stringify({ username, name, password, bio }) });
   }
@@ -210,26 +255,37 @@ export class VeritagApi {
     return this.j("/curators/logout", { method: "POST" });
   }
 
+  // -- directory --
   listCurators(): Promise<Curator[]> {
     return this.j("/curators");
   }
+  artist(artistId: string): Promise<Artist> {
+    return this.j(`/artists/${encodeURIComponent(artistId)}`);
+  }
+  artistArtworks(artistId: string): Promise<Artwork[]> {
+    return this.j(`/artists/${encodeURIComponent(artistId)}/artworks`);
+  }
+  artistRequests(artistId: string): Promise<VerificationReq[]> {
+    return this.j(`/artists/${encodeURIComponent(artistId)}/requests`);
+  }
+
+  // -- the blue check --
   incoming(curatorId: string, status = "pending"): Promise<VerificationReq[]> {
     return this.j(`/curators/${curatorId}/requests?status=${status}`);
   }
   confirm(requestId: string, code: string): Promise<VerificationReq> {
-    return this.j(`/verifications/${requestId}/confirm`, {
-      method: "POST",
-      body: JSON.stringify({ code }),
-    });
+    return this.j(`/verifications/${requestId}/confirm`, { method: "POST", body: JSON.stringify({ code }) });
   }
   reject(requestId: string): Promise<VerificationReq> {
     return this.j(`/verifications/${requestId}/reject`, { method: "POST" });
   }
+
+  // -- roster, catalogue, rooms --
   roster(curatorId: string): Promise<Artist[]> {
     return this.j(`/curators/${curatorId}/roster`);
   }
-  artistArtworks(artistId: string): Promise<Artwork[]> {
-    return this.j(`/artists/${artistId}/artworks`);
+  catalogue(curatorId: string): Promise<CatalogueEntry[]> {
+    return this.j(`/curators/${curatorId}/artworks`);
   }
   createExhibition(body: CreateExhibition): Promise<Exhibition> {
     return this.j("/exhibitions", { method: "POST", body: JSON.stringify(body) });
@@ -246,23 +302,13 @@ export class VeritagApi {
   deleteExhibition(exhibitionId: string): Promise<unknown> {
     return this.j(`/exhibitions/${exhibitionId}`, { method: "DELETE" });
   }
-  catalogue(curatorId: string): Promise<CatalogueEntry[]> {
-    return this.j(`/curators/${curatorId}/artworks`);
-  }
   artworkDetail(uid: string): Promise<ArtworkDetail> {
-    return this.j(`/artworks/${uid}`);
+    return this.j(`/artworks/${encodeURIComponent(uid)}`);
   }
+
+  // -- the tap --
   passport(u: string, c: number, m: string, kv = 1): Promise<Passport> {
     const q = new URLSearchParams({ u, c: String(c), m, kv: String(kv) });
     return this.j(`/passport?${q.toString()}`);
-  }
-  passportUrl(url: string): Promise<Passport> {
-    const q = new URL(url).searchParams;
-    return this.passport(
-      q.get("u") ?? "",
-      Number(q.get("c") ?? "0"),
-      q.get("m") ?? "",
-      Number(q.get("kv") ?? "1"),
-    );
   }
 }

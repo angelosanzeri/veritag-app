@@ -1,9 +1,9 @@
 {
   "name": "@veritag/web-portal",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Veritag curator portal — a React app on the @veritag/sdk SDK.",
+  "description": "Veritag — the platform for curators and artists: ArtTrust passports, Private Views, artist cards. React on @veritag/sdk.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -14,6 +14,8 @@
   "dependencies": {
     "@veritag/sdk": "file:../sdk/ts/veritag-sdk",
     "leaflet": "^1.9.4",
+    "lucide-react": "^1.47.0",
+    "qrcode-generator": "^2.0.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

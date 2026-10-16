@@ -39,3 +39,19 @@ test("verdict policy maps the three booleans", () => {
   assert.equal(verdictOf({ ...base, chip_authentic: true, not_replayed: true, issuer_verified: false }), "unverified_artist");
   assert.equal(verdictOf({ ...base, chip_authentic: true, not_replayed: true, issuer_verified: true }), "authentic");
 });
+
+test("parseTap reads every shape a tag or a share can hand us", async () => {
+  const { parseTap } = await import("../dist/portal.js");
+  assert.deepEqual(parseTap("https://app.veritag.art/p?u=04a1b2c3d4e501&c=7&m=abcdef0123456789&kv=1"), {
+    u: "04A1B2C3D4E501", c: 7, m: "abcdef0123456789", kv: 1,
+  });
+  assert.deepEqual(parseTap("app.veritag.art/t/04a1b2c3d4e501"), { uid: "04A1B2C3D4E501" });
+  assert.deepEqual(parseTap("04a1b2c3d4e501"), { uid: "04A1B2C3D4E501" });
+  // the NDEF payload itself: the counter mirror is hex
+  assert.deepEqual(parseTap("v1;u=04A1B2C3D4E501;c=00000A;m=ABCDEF0123456789"), {
+    u: "04A1B2C3D4E501", c: 10, m: "abcdef0123456789", kv: 1,
+  });
+  assert.equal(parseTap(""), null);
+  assert.equal(parseTap("https://example.com/hello"), null);
+  assert.equal(parseTap("not a tag"), null);
+});

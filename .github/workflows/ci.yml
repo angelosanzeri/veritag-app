@@ -1,4 +1,4 @@
-# CI/CD for veritag-app: curator web portal + Android APK.
+# CI/CD for veritag-app: the Veritag web platform, the Studio API and the Android APK.
 #
 # The SDK lives in its own repo (angesanze/veritag-sdk) and is checked out into
 # ./sdk (gitignored) — the same convention used for local development. If the
@@ -19,6 +19,20 @@ env:
   FLUTTER_VERSION: "3.38.5"
 
 jobs:
+  studio:
+    name: Studio API (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install + test (against the dev mock of veritag-core)
+        run: |
+          cd studio-api
+          pip install -r requirements-dev.txt
+          python -m pytest -q
+
   web:
     name: Web portal (typecheck + build)
     runs-on: ubuntu-latest
@@ -74,7 +88,9 @@ jobs:
           flutter analyze
           flutter test
       - name: Build release APK
-        run: cd mobile-app && flutter build apk --release
+        # STUDIO_BASE (repo variable) lets a tap open Private Views and the artist's
+        # card; empty builds the core-only passport.
+        run: cd mobile-app && flutter build apk --release --dart-define=STUDIO_BASE=${{ vars.STUDIO_BASE }}
       - uses: actions/upload-artifact@v4
         with:
           name: veritag-apk
@@ -90,6 +106,9 @@ jobs:
       id-token: write   # Workload Identity Federation — no stored keys
     env:
       API_BASE: https://api.veritag.art
+      # Set the repo variable STUDIO_BASE once the Studio API is deployed; empty keeps
+      # Studio features (Private View, vCard, leads, insights) switched off.
+      STUDIO_BASE: ${{ vars.STUDIO_BASE }}
     steps:
       - uses: actions/checkout@v4
       - name: Checkout SDK into ./sdk
@@ -105,7 +124,7 @@ jobs:
         run: |
           cd sdk/ts/veritag-sdk && npm install --no-audit --no-fund && npm run build
           cd ../../../web-portal && npm install --no-audit --no-fund
-          VITE_API_BASE=$API_BASE npm run build
+          VITE_API_BASE=$API_BASE VITE_STUDIO_BASE=$STUDIO_BASE npm run build
       - uses: google-github-actions/auth@v2   # exports ADC — firebase-tools picks it up
         with:
           workload_identity_provider: projects/484395315892/locations/global/workloadIdentityPools/github/providers/github-provider

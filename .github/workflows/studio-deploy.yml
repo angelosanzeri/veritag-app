@@ -1,0 +1,45 @@
+# Deploy the Veritag Studio API to Cloud Run — on demand only, so CI never
+# touches production by surprise. Needs (once, in GCP project veritag-502321):
+#   · Firestore (Native mode) enabled;
+#   · a Secret Manager secret `studio-secret` (random 32+ bytes);
+#   · the deployer service account allowed to build/deploy Cloud Run.
+# Then set the repo variable STUDIO_BASE to the service URL and re-run CI so the
+# web platform turns its Studio features on.
+name: Deploy Studio API
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: veritag-502321
+  REGION: europe-west8
+  SERVICE: veritag-studio
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test first
+        run: cd studio-api && pip install -r requirements-dev.txt && python -m pytest -q
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/484395315892/locations/global/workloadIdentityPools/github/providers/github-provider
+          service_account: veritag-deployer@veritag-502321.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy (source build)
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --source studio-api \
+            --project "$PROJECT_ID" --region "$REGION" \
+            --allow-unauthenticated \
+            --memory 512Mi \
+            --set-env-vars "^;^VERITAG_CORE_URL=https://api.veritag.art;STUDIO_STORE=firestore;STUDIO_APP_URL=https://app.veritag.art;STUDIO_CORS=https://app.veritag.art,https://veritag.web.app" \
+            --set-secrets "STUDIO_SECRET=studio-secret:latest"
