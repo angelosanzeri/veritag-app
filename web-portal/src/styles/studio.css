@@ -460,13 +460,13 @@
   display: flex;
   align-items: flex-end;
   gap: 12px;
-  padding: 0 16px 16px;
-  margin-top: -22px;
+  padding: 10px 16px 16px;
   position: relative;
 }
 .artist-tile-body .avatar {
   border: 3px solid var(--elevated);
   box-sizing: content-box;
+  margin-top: -34px; /* the avatar rides the strip; the name sits below it */
 }
 .artist-tile-body b {
   font-weight: 650;
