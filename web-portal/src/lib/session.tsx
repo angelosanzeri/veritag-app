@@ -100,6 +100,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         } else if (studioToken && studio) {
           const me = await studio.me();
           if (alive) setSession({ kind: "artist", id: me.id, name: me.name });
+        } else if (studioToken) {
+          // Studio switched off: an artist session can't be restored anywhere
+          ls.set(K.studioToken, null);
+          if (alive) {
+            setStudioToken(null);
+            setSession(null);
+          }
         } else if (alive) setSession(null);
       } catch (e) {
         // Only a definitive "no" signs you out; a flaky network keeps the token.
